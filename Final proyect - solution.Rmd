@@ -1,0 +1,494 @@
+---
+title: "R Notebook"
+output:
+  html_document:
+    df_print: paged
+---
+
+#FINAL DELIVERY
+
+The Fraud.csv attachment contains information about many credit and debit card transactions through different channels. For each transaction there is its monetary value and other variables (see the dictionary_variables.xlsx file). Of particular importance is the FRAUD variable, where 1 appears if the transaction was a fraud or 0 if it was a legitimate transaction.
+
+The objective of this practice is to develop a model that allows, based on these data, to predict what the value of the FRAUD variable will be for any transaction.
+
+
+## Exploratory Analysis
+
+
+
+```{r}
+df<-read.csv("Fraud.csv",header = TRUE)
+str(df)
+head(df)
+```
+
+
+The first thing I do is cast the variables to transform all the variables that are categorical into a factor
+
+
+```{r}
+
+df$FRAUDE<-as.factor(df$FRAUDE)
+df$HORA_AUX<-as.factor(df$HORA_AUX)
+df$Canal1<-as.factor(df$Canal1)
+df$COD_PAIS<-as.factor(df$COD_PAIS)
+df$CANAL<-as.factor(df$CANAL)
+df$SEXO<-as.factor(df$SEXO)  #The factor "" is the Null of this column
+df$SEGMENTO<-as.factor(df$SEGMENTO) #The factor "" is the Null of this column
+
+```
+
+Now we see how the variables are distributed to know if there are extreme or empty values
+
+```{r}
+
+
+boxplot(df$VALOR) 
+boxplot(df$HORA_AUX)
+boxplot(df$Dist_max_NAL)
+table(df$Canal1)
+boxplot(df$FECHA)
+table(df$COD_PAIS) 
+df$COD_PAIS<-as.character(df$COD_PAIS)
+for(i in 1:nrow(df)){
+  if(df['COD_PAIS'][i,]!='US' & df['COD_PAIS'][i,]!='PA'){
+    df['COD_PAIS'][i,]='OTROS'
+  }
+    
+}
+df$COD_PAIS<-as.factor(df$COD_PAIS)
+table(df$COD_PAIS)
+```
+
+We can see that there are some very large values that are far from the common in the variable VALOR
+We see that almost all the cases occur in the United States and then take Panama into account with 126 cases, so I divide it into three cases adding a third factor of others.
+
+```{r}
+table(df$CANAL)
+table(df$DIASEM)
+table(df$DIAMES)
+boxplot(df$FECHA_VIN)
+
+
+
+boxplot(df$OFICINA_VIN)
+table(df$SEXO) # Convert the 55 " " values to NA
+df[df["SEXO"]=="",14]<-NA
+table(df$SEXO)
+table(df$SEGMENTO)# Convert the 24 " " values to NA
+df[df["SEGMENTO"]=="",15]<-NA
+table(df$SEGMENTO)
+boxplot(df$EDAD)
+table(df$EDAD)
+
+
+
+boxplot(df$INGRESOS)# We can also see that income reaches very extreme values above normal.
+boxplot(df$EGRESOS) 
+table(df$NROPAISES)
+boxplot(df$Dist_Sum_INTER)
+boxplot(df$Dist_Mean_INTER) 
+table(df$NROCIUDADES)
+boxplot(df$Dist_sum_NAL)
+boxplot(df$Dist_Mean_NAL)
+boxplot(df$Dist_HOY)
+boxplot(df$Dist_sum_NAL)
+
+
+
+```
+We see that in age there are values such as 115 or 133 that are quite strange, then we will put them as missing values ​​since it may be due to someone entering this data incorrectly.
+
+All these boxplots on the distances show the same shape that I already commented on before that a lot of extreme data appears at the top.
+
+
+## Imputation of values
+
+ Let's first see how many missing values we have.
+
+```{r}
+
+
+sapply(df, function(x) sum(is.na(x)))
+
+```
+
+```{r}
+library(missForest)
+
+df.imp <- missForest(df)
+
+df <- df.imp$ximp
+
+```
+
+We detect outliers using the interquantile range and considering outliers the values that exceed this interquantile range by 1.5.
+In the case of the date, it is the values below that we want to eliminate.
+
+```{r}
+
+
+summary(df$VALOR)
+df$VALOR <- replace(df$VALOR, df$VALOR >= 505819 + 1.5*(505819-90160), 505819 + 1.5*(505819-90160))
+
+
+summary(df$FECHA_VIN)
+df$FECHA_VIN <- replace(df$FECHA_VIN, df$FECHA_VIN <=19951102-1.5*(20080723-19951102),19951102-1.5*(20080723-19951102))
+
+summary(df$INGRESOS)
+df$INGRESOS<-replace(df$INGRESOS,df$INGRESOS>=1.300e+07+1.5*(1.300e+07-2.500e+06 ),1.300e+07+1.5*(1.300e+07-2.500e+06 ))
+
+summary(df$EGRESOS)
+df$EGRESOS<-replace(df$EGRESOS,df$EGRESOS>=4500000+1.5*(4500000-500000),4500000+1.5*(4500000-500000))
+
+summary(df$Dist_Sum_INTER)
+df$Dist_Sum_INTER<-replace(df$Dist_Sum_INTER,df$Dist_Sum_INTER>=25078.6+1.5*(25078.6-9104.8),25078.6+1.5*(25078.6-9104.8))
+
+# In this case we will also have to perform the join for values ​​that are much smaller.
+summary(df$Dist_Mean_INTER)
+df$Dist_Mean_INTER<-replace(df$Dist_Mean_INTER,df$Dist_Mean_INTER>=5352.8+1.5*(5352.8- 4308.1),5352.8+1.5*(5352.8- 4308.1))
+df$Dist_Mean_INTER<-replace(df$Dist_Mean_INTER,df$Dist_Mean_INTER<=4308.1-1.5*(5352.8- 4308.1),4308.1-1.5*(5352.8- 4308.1))
+
+summary(df$Dist_sum_NAL)
+df$Dist_sum_NAL<-replace(df$Dist_sum_NAL,df$Dist_sum_NAL>=2533.4+1.5*(2533.4-139.9),2533.4+1.5*(2533.4-139.9))
+
+summary(df$Dist_Mean_NAL)
+df$Dist_Mean_NAL<-replace(df$Dist_Mean_NAL,df$Dist_Mean_NAL>=236.03+1.5*(236.03-40.72),236.03+1.5*(236.03-40.72))
+
+summary(df$Dist_sum_NAL)
+df$Dist_sum_NAL<-replace(df$Dist_sum_NAL,df$Dist_sum_NAL>=2533.4+1.5*(2533.4-139.9),2533.4+1.5*(2533.4-139.9))
+```
+
+I eliminate the strange values ​​of the age and I impute those strange values again
+
+```{r}
+
+
+df[df["EDAD"]==133,16]<-0
+df[df["EDAD"]==115,16]<-0
+df[df["EDAD"]==0,16]<-NA
+
+
+
+
+df.imp <- missForest(df)
+
+df <- df.imp$ximp
+sapply(df, function(x) sum(is.na(x)))
+```
+
+
+Now we move on to see how each variable behaves with the target variable.
+
+```{r}
+
+library(ggplot2)
+
+ggplot(df)+
+  aes(x=VALOR,fill=FRAUDE)+
+  geom_histogram(position = "dodge")
+```
+
+We can see in the comparison of these two graphs that there are some values such as around 500,000 that the number of scams is very large compared to the total.
+
+```{r}
+
+ggplot(df)+
+  aes(x=HORA_AUX,fill=FRAUDE)+
+  geom_bar(position = "dodge")
+
+```
+
+In this histogram we see that in the first hours from 1 to 6 many scams seem to occur, even there are hours with more scams than legitimate transactions.
+
+```{r}
+
+ggplot(df)+
+  aes(x=Dist_max_NAL,fill=FRAUDE)+
+  geom_histogram(position = "dodge")
+
+
+```
+
+In this graph we can see only one extreme data around 1500 where there are many scams.
+
+```{r}
+
+ggplot(df)+
+  aes(x=Canal1,fill=FRAUDE)+
+  geom_bar(position = "dodge")
+
+```
+This seems a very indicative variable since we can see that in the POS Channel there are few scams compared to the total, while in ATM_INT there are more scams than legitimate transactions.
+
+```{r}
+
+ggplot(df)+
+  aes(x=FECHA,fill=FRAUDE)+
+  geom_bar(position = "dodge")
+
+```
+
+
+```{r}
+
+ggplot(df)+
+  aes(x=COD_PAIS,fill=FRAUDE)+
+  geom_bar(position = "dodge")
+
+```
+
+This again seems to be a very important variable to note, since it seems that in both countries (United States, Panama) there are not many scams, but when we are abroad, they do occur.
+
+```{r}
+ggplot(df)+
+  aes(x=CANAL,fill=FRAUDE)+
+  geom_bar(position = "dodge")
+
+```
+
+This again is a variable that seems important because ATM_INT seems to be a potentially significant value for predicting scams.
+
+```{r}
+
+ggplot(df)+
+  aes(x=DIASEM,fill=FRAUDE)+
+  geom_bar(position = "dodge")
+
+```
+
+
+```{r}
+
+ggplot(df)+
+  aes(x=FECHA_VIN,fill=FRAUDE)+
+  geom_histogram(position = "dodge")
+
+```
+
+```{r}
+ggplot(df)+
+  aes(x=OFICINA_VIN,fill=FRAUDE)+
+  geom_histogram(position = "dodge")
+
+```
+
+
+```{r}
+
+ggplot(df)+
+  aes(x=SEXO,fill=FRAUDE)+
+  geom_bar(position = "dodge")
+
+```
+
+
+```{r}
+ggplot(df)+
+  aes(x=SEGMENTO,fill=FRAUDE)+
+  geom_bar(position = "dodge")
+
+```
+It seems that all the segments behave in a similar way.
+```{r}
+
+ggplot(df)+
+  aes(x=EDAD,fill=FRAUDE)+
+  geom_histogram(position = "dodge")
+
+```
+It seems that around 30 they are more likely to commit a scam.
+```{r}
+
+ggplot(df)+
+  aes(x=INGRESOS,fill=FRAUDE)+
+  geom_histogram(position = "dodge")
+
+```
+
+There seems to be a higher number of low income scams.
+
+```{r}
+
+ggplot(df)+
+  aes(x=EGRESOS,fill=FRAUDE)+
+  geom_histogram(position = "dodge")
+
+```
+There seems to be a greater number of scams with low expenses.
+
+```{r}
+
+ggplot(df)+
+  aes(x=NROPAISES,fill=FRAUDE)+
+  geom_bar(position = "dodge")
+
+```
+
+```{r}
+ggplot(df)+
+  aes(x=Dist_Sum_INTER,fill=FRAUDE)+
+  geom_histogram(position = "dodge")
+```
+
+```{r}
+ggplot(df)+
+  aes(x=Dist_Mean_INTER,fill=FRAUDE)+
+  geom_histogram(position = "dodge")
+```
+
+```{r}
+ggplot(df)+
+  aes(x=NROCIUDADES,fill=FRAUDE)+
+  geom_bar(position = "dodge")
+```
+
+```{r}
+ggplot(df)+
+  aes(x=Dist_sum_NAL,fill=FRAUDE)+
+  geom_histogram(position = "dodge")
+```
+
+```{r}
+ggplot(df)+
+  aes(x=Dist_Mean_NAL,fill=FRAUDE)+
+  geom_histogram(position = "dodge")
+```
+
+```{r}
+ggplot(df)+
+  aes(x=Dist_HOY,fill=FRAUDE)+
+  geom_histogram(position = "dodge")
+```
+
+
+## Analysis of the dependence and independence of the variables. Multicollinearity.
+
+I perform a One Hot Encore for the categorical variables.
+
+```{r}
+
+str(df)
+df$HORA_AUX<-as.integer(df$HORA_AUX)
+OneHot<-model.matrix(FRAUDE~.-id-1,df)
+
+```
+
+
+
+```{r}
+
+
+library(Hmisc)
+matricir<-rcorr(as.matrix(OneHot[,1:ncol(OneHot)]))
+matricir$P<0.05 #The values that are less than 0.05 assume the alternative hypothesis that the variables are correlated.
+
+
+
+```
+
+We can see columns such as CANALMCI or Canal1Pos (in general these two channels) that appear many True so they are correlated with many other columns so it may be that they provide us with little information due to multicollinearity. On the other hand, we see columns such as HORA_AUX or DIASEM that have many Falses, so it seems that the values ​​of these columns cannot be determined with the others, so these values ​​do not have multicollinearity.
+
+## Modeling
+
+For this case in which we want to predict the value of a binary variable such as FRAUD, we will need a logistic regression to be able to predict its value.
+
+
+Now I proceed to make an initial interpretation taking all the variables for the logistic regression.
+
+```{r}
+
+modelo_max<-glm(FRAUDE~.-id,df,family = binomial)
+summary(modelo_max)
+
+```
+
+We can see with this analysis that the columns that give us more value to know if the fraud is going to occur or not are: Value, TIME_AUX, Channel1, COD_COUNTRY (It seems that when more information is provided is when they are from Panama or the United States) , WEEKDAY, Dist_Sum_INTER.
+
+
+Now we perform a StepAIC process to check which is the best model, taking only the variables that are necessary.
+
+```{r}
+
+library(MASS)
+modelo_min<-glm(FRAUDE~1,df,family = binomial)
+
+
+
+step<-stepAIC(modelo_min,direction = "forward",scope = list(upper=modelo_max,lower=modelo_min))
+```
+
+
+```{r}
+
+step2<-stepAIC(modelo_min,direction = "both",scope = list(upper=modelo_max,lower=modelo_min))
+step3<-stepAIC(modelo_max,direction = "backward")
+
+```
+
+```{r}
+summary(step)
+summary(step2)
+summary(step3)
+```
+
+We see that the first two coincide and the third method gives the same model substituting the Canal1 variable for CHANNEL. But we will take the method of the first two as the best since it has a lower AIC. But saying that this can mean that these two variables provide very similar information and can never appear at the same time in a model.
+
+But we will use some criteria besides the AIC to see which one is better.
+
+```{r}
+
+
+BIC(step)
+BIC(step3)
+
+```
+With the BIC we can see that it is better to use Channel1. But the difference is very small, so it does not determine that one model is much better than another.
+We now analyze the two models with the ROC curve.
+
+```{r}
+
+library(pROC)
+roc(df$FRAUDE,step$fitted.values, plot=TRUE, legacy.axes=TRUE, percent=TRUE, xlab="False Positive Rate", ylab="True Positive Rate", col="#377eb8", lwd=4, print.auc = TRUE, print.auc.x=40,print.auc.y=30 )
+
+```
+
+
+```{r}
+
+roc(df$FRAUDE,step3$fitted.values, plot=TRUE, legacy.axes=TRUE, percent=TRUE, xlab="False Positive Rate", ylab="True Positive Rate", col="#377eb8", lwd=4, print.auc = TRUE, print.auc.x=40,print.auc.y=30 )
+
+```
+By this criterion, both methods are equal since both have an area under the curve of 88.2%.
+
+Now we perform an analysis of the residuals of the models to see if they are normally distributed.
+```{r}
+
+qqnorm(modelo_max$residuals)
+qqline(modelo_max$residuals)
+shapiro.test(modelo_max$residuals)
+
+```
+So we can see that the data does not behave like a normal distribution.
+
+```{r}
+qqnorm(step$residuals)
+qqline(step$residuals)
+shapiro.test(step$residuals)
+```
+
+
+
+```{r}
+qqnorm(step3$residuals)
+qqline(step3$residuals)
+shapiro.test(step3$residuals)
+
+```
+We can see that in no case do our residuals follow a normal distribution.
+
+
+
+#CONCLUSION
+
+As we have seen in all our data, the key variables to predict Fraud are Canal1 , CANAL and COD_PAIS. But we can see that Canal1 and CANAL provide us with the same information, Canal1 being better, so by having only this variable we can obtain the same information without problems of adding noise to the model. After these, the following variables that we would also have to take into account are Value, HORA_AUX, DIASEM, Dist_Sum_INTER. These, although to a lesser extent, are also useful for predicting Fraud. To say that in general the models have had a high number of false positives compared to the low number of false negatives. This can be interesting since, thinking about Fraud, it may be more important that we let a few frauds pass instead of paralyzing transactions that are not Frauds so that the transaction can be resumed later. This is why under certain conditions the model may be more useful than these data reflect.
